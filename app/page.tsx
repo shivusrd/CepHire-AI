@@ -16,9 +16,35 @@ export default function Home() {
   const [isProcessed, setIsProcessed] = useState(false);
   const [candidateName, setCandidateName] = useState<string>("");
   const [dbId, setDbId] = useState<string | null>(null);
+  
+  // New state to track if Vapi SDK is actually loaded
+  const [isVapiReady, setIsVapiReady] = useState(false);
 
   const adminEmail = "dubeyshivam890@gmail.com";
   const isAdmin = user?.primaryEmailAddress?.emailAddress === adminEmail;
+
+  // Polling logic to detect Vapi SDK
+  useEffect(() => {
+    const checkVapi = () => {
+      const vapi = (window as any).vapiSDK || (window as any).vapi;
+      if (vapi) {
+        console.log("✅ Vapi SDK detected and ready for use.");
+        setIsVapiReady(true);
+        return true;
+      }
+      return false;
+    };
+
+    // Check immediately on mount
+    if (checkVapi()) return;
+
+    // If not found, check every 1 second
+    const interval = setInterval(() => {
+      if (checkVapi()) clearInterval(interval);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -36,6 +62,7 @@ export default function Home() {
       setError(response.error);
       setLoading(false);
     } else {
+      console.log("📦 Supabase record created! ID:", response.candidateId);
       setDbId(response.candidateId);
       setIsProcessed(true);
       setLoading(false);
@@ -43,7 +70,6 @@ export default function Home() {
   }
 
   const startInterview = () => {
-    // 1. Check for BOTH window objects Vapi might use
     const vapi = (window as any).vapiSDK || (window as any).vapi;
     const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
     const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID;
@@ -61,13 +87,12 @@ export default function Home() {
         assistantOverrides: {
           variableValues: {
             name: candidateName,
-            db_id: dbId, // This links the interview ratings to your Supabase ID
+            db_id: dbId, 
           },
         },
       });
     } else {
-      console.warn("Vapi SDK not yet initialized on window object.");
-      alert("AI is joining the call... please wait 5 seconds and click again!");
+      alert("AI is still initializing. Please wait 3 seconds and try again.");
     }
   };
 
@@ -122,10 +147,22 @@ export default function Home() {
             <div className="bg-white p-12 rounded-[2.5rem] shadow-2xl border border-gray-100 text-center animate-in zoom-in duration-500">
               <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">✓</div>
               <h2 className="text-4xl font-black text-gray-900 mb-3">Ready, {candidateName}!</h2>
-              <button onClick={startInterview} className="w-full bg-blue-600 text-white py-6 rounded-3xl font-black text-2xl hover:bg-blue-700 transition-all shadow-xl flex items-center justify-center gap-4">
-                <span>Start AI Interview</span>
-                <span className="bg-blue-500 px-3 py-1 rounded-lg text-sm uppercase">Voice & Video</span>
+              
+              <button 
+                onClick={startInterview} 
+                disabled={!isVapiReady}
+                className={`w-full py-6 rounded-3xl font-black text-2xl transition-all shadow-xl flex items-center justify-center gap-4 
+                  ${isVapiReady ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-400 cursor-not-allowed'}`}
+              >
+                <span>{isVapiReady ? "Start AI Interview" : "AI Joining Call..."}</span>
+                {isVapiReady && <span className="bg-blue-500 px-3 py-1 rounded-lg text-sm uppercase animate-pulse">Live</span>}
               </button>
+              
+              {!isVapiReady && (
+                <p className="mt-4 text-xs text-gray-400">
+                  Waiting for secure voice connection... (Ensure Ad-blockers are off)
+                </p>
+              )}
             </div>
           )}
         </SignedIn>
