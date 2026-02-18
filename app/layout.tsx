@@ -32,7 +32,7 @@ export default function RootLayout({
           {/* Load Vapi globally with a high-priority strategy */}
           <Script 
             src="https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/vapi-widget.js"
-            strategy="afterInteractive"
+            strategy="beforeInteractive"
           />
         </body>
       </html>
