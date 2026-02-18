@@ -29,9 +29,9 @@ export default function RootLayout({
       <html lang="en">
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
           {children}
-          {/* Load Vapi globally with a high-priority strategy */}
+          {/* Load Vapi globally without client-side handlers to avoid serialization errors */}
           <Script 
-            src="https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/vapi-widget.js"
+            src="https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js"
             strategy="beforeInteractive"
           />
         </body>
