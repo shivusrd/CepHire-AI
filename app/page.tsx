@@ -16,7 +16,6 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // --- ADMIN CONFIG ---
   const adminEmail = "dubeyshivam890@gmail.com";
   const isAdmin = user?.primaryEmailAddress?.emailAddress === adminEmail;
 
@@ -91,9 +90,9 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all disabled:bg-gray-300 shadow-lg shadow-blue-200"
+                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all disabled:bg-gray-300 shadow-lg"
               >
-                {loading ? "Analyzing Candidate..." : "Start AI Audit"}
+                {loading ? "Analyzing..." : "Start AI Audit"}
               </button>
             </form>
 
@@ -104,7 +103,7 @@ export default function Home() {
             )}
 
             {result && (
-              <div className="mt-10 p-8 bg-gray-50 rounded-3xl border border-gray-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="mt-10 p-8 bg-gray-50 rounded-3xl border border-gray-100">
                 <h2 className="text-xs font-black text-blue-600 uppercase tracking-widest mb-4">Interview Strategy</h2>
                 <div className="prose prose-sm prose-blue text-gray-700 max-w-none">
                   <ReactMarkdown>{result}</ReactMarkdown>
@@ -117,16 +116,23 @@ export default function Home() {
         <SignedOut>
           <div className="text-center bg-white p-12 rounded-[2.5rem] shadow-xl border border-gray-100">
             <h2 className="text-3xl font-black mb-4 text-gray-900">Welcome to CepHire</h2>
-            <p className="text-gray-500 mb-8 font-medium">Please sign in to start auditing resumes and seeing AI insights.</p>
+            <p className="text-gray-500 mb-8 font-medium">Please sign in to start auditing resumes.</p>
             <SignInButton mode="modal">
-              <button className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-200">
+              <button className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-lg">
                 Sign In to Continue
               </button>
             </SignInButton>
           </div>
         </SignedOut>
-
       </main>
+
+      {/* --- FOOTER --- */}
+      <footer className="mt-20 border-t border-gray-200 bg-white py-12">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <p className="text-sm text-gray-500">© 2026 CepHire AI. Noida, UP.</p>
+          <p className="text-xs text-gray-400 mt-2">support@cephire.com</p>
+        </div>
+      </footer>
     </div>
   );
 }

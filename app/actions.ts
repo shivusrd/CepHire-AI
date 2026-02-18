@@ -5,36 +5,22 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "@/lib/supabase";
 import { auth } from "@clerk/nextjs/server";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+// Note: Ensure your .env.local uses NEXT_PUBLIC_ if you access it this way, 
+// though for server actions, GEMINI_API_KEY (without prefix) is usually safer.
+const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || "");
 
 export async function processResume(formData: FormData) {
   try {
-    // 1. AUTHENTICATION CHECK
+    // DEBUGGER: Check if the key is actually loading
+    console.log("DEBUG: Key exists?", !!process.env.NEXT_PUBLIC_GEMINI_API_KEY);
+
+    // 1. AUTHENTICATION
     const { userId } = await auth();
     if (!userId) {
       return { error: "Authentication required. Please sign in." };
     }
 
-    // 2. USAGE LIMITER CHECK
-    // Counting entries in the 'candidates' table for the current user
-    const { count, error: countError } = await supabase
-      .from("candidates")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId);
-
-    if (countError) {
-      console.error("Supabase Count Error:", countError);
-      return { error: "Could not verify usage limits. Please try again." };
-    }
-
-    const LIMIT = 3;
-    if (count !== null && count >= LIMIT) {
-      return { 
-        error: `Limit Reached: You have used all ${LIMIT} free AI audits. Please upgrade to Pro for unlimited access.` 
-      };
-    }
-
-    // 3. FILE EXTRACTION
+    // 2. FILE EXTRACTION
     const file = formData.get("resume") as File;
     if (!file) return { error: "No file uploaded" };
 
@@ -54,8 +40,9 @@ export async function processResume(formData: FormData) {
       return { error: "Unsupported file type. Please upload PDF or DOCX." };
     }
 
-    // 4. GEMINI AI ANALYSIS
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // 3. GEMINI AI ANALYSIS
+    // Testing Note: Use "gemini-1.5-flash" if "gemini-2.5-flash" causes quota issues
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const prompt = `
       You are an expert technical recruiter. Analyze the following resume text and provide:
       1. A summary of technical strengths.
@@ -68,12 +55,12 @@ export async function processResume(formData: FormData) {
     const result = await model.generateContent(prompt);
     const aiResponse = result.response.text();
 
-    // 5. SAVE TO DATABASE (Targeting 'candidates' table)
+    // 4. SAVE TO DATABASE (candidates table)
     const { error: insertError } = await supabase.from("candidates").insert([
       {
         user_id: userId,
         name: file.name.replace(/\.[^/.]+$/, ""), 
-        resume_text: extractedText.substring(0, 1000), // Saving first 1000 chars for context
+        resume_text: extractedText.substring(0, 1000), 
         ai_result: aiResponse,
         created_at: new Date().toISOString(),
       },
@@ -81,13 +68,28 @@ export async function processResume(formData: FormData) {
 
     if (insertError) {
       console.error("Supabase Insert Error:", insertError);
-      // We still return the text so the user gets their result
     }
 
     return { text: aiResponse };
 
   } catch (err: any) {
     console.error("Processing Error:", err);
-    return { error: "An unexpected error occurred during processing." };
+
+    // --- ENHANCED ERROR HANDLING FOR UI ---
+    
+    // Check for Rate Limit / Quota Exceeded (429)
+    if (err.message?.includes("429") || err.status === 429) {
+      return { 
+        error: "AI Limit Reached: Google's free tier is exhausted for now. Please wait a minute and try again." 
+      };
+    }
+
+    // Check for Invalid API Key (400)
+    if (err.message?.includes("400")) {
+      return { error: "AI Service Error: Invalid API Key. Please verify your .env.local settings." };
+    }
+
+    // Default error for everything else
+    return { error: "An unexpected error occurred. Please try again later." };
   }
 }
