@@ -45,27 +45,31 @@ export default function Home() {
   }
 
   const startInterview = () => {
-    if (typeof window !== "undefined" && (window as any).vapiSDK) {
-      (window as any).vapiSDK.run({
-        apiKey: "YOUR_VAPI_PUBLIC_KEY", 
-        assistantId: "YOUR_ASSISTANT_ID",
-        assistantOverrides: {
-          variableValues: {
-            name: candidateName,
-            db_id: dbId, // This is CRITICAL for your webhook to work
-          },
+  const vapi = (window as any).vapiSDK;
+
+  if (vapi) {
+    vapi.run({
+      apiKey: "c11d6c7c-3361-4d16-9c89-a0b96f953834", 
+      assistantId: "8e924de8-5f30-48af-858e-9d9cb9ba83d2",
+      assistantOverrides: {
+        variableValues: {
+          name: candidateName,
+          db_id: dbId, 
         },
-      });
-    } else {
-      alert("Voice AI is still loading. Please wait a second and try again.");
-    }
-  };
+      },
+    });
+  } else {
+    // If it's still not loaded, try to initialize it manually or wait
+    console.error("Vapi SDK not found on window object.");
+    alert("The AI Interviewer is taking a moment to join the call. Please wait 3 seconds and click again.");
+  }
+};
 
   return (
     <div className="min-h-screen bg-gray-50 font-[family-name:var(--font-geist-sans)]">
       <Script 
         src="https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/vapi-widget.js"
-        strategy="afterInteractive"
+        strategy="beforeInteractive"
       />
 
       {/* --- NAVBAR --- */}
