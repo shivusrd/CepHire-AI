@@ -8,124 +8,90 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function getCandidates() {
-      const { data, error } = await supabase
-        .from("candidates")
-        .select("*")
-        .order("created_at", { ascending: false });
+  async function getCandidates() {
+    const { data, error } = await supabase
+      .from("candidates")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Error fetching:", error.message);
-      } else {
-        setCandidates(data || []);
-      }
-      setLoading(false);
-    }
+    if (!error) setCandidates(data || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
     getCandidates();
   }, []);
 
-  const toggleRow = (id: string) => {
-    setExpandedId(expandedId === id ? null : id);
+  const deleteCandidate = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this record?")) return;
+    const { error } = await supabase.from("candidates").delete().eq("id", id);
+    if (!error) getCandidates();
   };
 
-  if (loading) return <div className="p-10 text-center font-mono animate-pulse">Loading Recruitment Pipeline...</div>;
+  if (loading) return <div className="p-10 text-center font-mono animate-pulse">Loading CepHire Pipeline...</div>;
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto min-h-screen bg-slate-50">
-      {/* Header Area */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+    <div className="p-8 max-w-6xl mx-auto min-h-screen bg-slate-50">
+      <div className="flex justify-between items-center mb-10">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">CepHire ADMIN</h1>
-          <p className="text-slate-500 text-sm font-medium">Real-time AI Interview Intelligence</p>
+          <h1 className="text-3xl font-black tracking-tighter text-slate-900 uppercase">CepHire AI Dashboard</h1>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Recruitment Intelligence</p>
         </div>
-        <div className="flex gap-3">
-           <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm text-center">
-             <p className="text-[10px] uppercase font-bold text-slate-400">Total Scans</p>
-             <p className="text-xl font-black text-blue-600">{candidates.length}</p>
-           </div>
-           <a href="/" className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 transition flex items-center shadow-lg shadow-blue-200">
-             + New Candidate
-           </a>
-        </div>
+        <button onClick={getCandidates} className="text-xs bg-white border px-4 py-2 rounded-lg font-bold hover:bg-slate-100">Refresh Data</button>
       </div>
 
       <div className="grid gap-4">
         {candidates.map((person) => (
-          <div key={person.id} className={`bg-white border rounded-2xl overflow-hidden transition-all shadow-sm ${expandedId === person.id ? 'ring-2 ring-blue-500 border-transparent' : 'border-slate-200'}`}>
-            
-            {/* Header Row */}
+          <div key={person.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
             <button 
-              onClick={() => toggleRow(person.id)}
-              className="w-full flex flex-wrap items-center justify-between p-5 hover:bg-slate-50 transition-colors text-left gap-4"
+              onClick={() => setExpandedId(expandedId === person.id ? null : person.id)}
+              className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors"
             >
-              <div className="flex items-center gap-4 min-w-[200px]">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-md">
-                  {person.name.charAt(0)}
-                </div>
-                <div>
-                  <h2 className="font-bold text-slate-800 text-lg leading-none">{person.name}</h2>
-                  <p className="text-xs text-slate-400 mt-1 font-semibold italic">
-                    {new Date(person.created_at).toLocaleDateString()} at {new Date(person.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                  </p>
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm">{person.name?.charAt(0)}</div>
+                <div className="text-left">
+                  <h2 className="font-bold text-slate-800 leading-none">{person.name}</h2>
+                  <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold">{new Date(person.created_at).toDateString()}</p>
                 </div>
               </div>
-
-              {/* Status & Quick Score */}
               <div className="flex items-center gap-6">
-                <div className="hidden md:flex flex-col items-end">
-                  <p className="text-[9px] uppercase font-bold text-slate-400 mb-1">Final AI Score</p>
-                  <div className="flex items-center gap-1">
-                    <span className="text-2xl font-black text-slate-800">{person.final_score || 0}</span>
-                    <span className="text-slate-300 font-bold text-sm">/10</span>
-                  </div>
+                <div className="text-right">
+                  <p className="text-[9px] font-black text-slate-400 uppercase">Score</p>
+                  <p className="text-xl font-black text-slate-900">{person.final_score || 0}/10</p>
                 </div>
-
-                <div className="flex flex-col items-center">
-                  <span className={`text-[10px] font-black px-3 py-1 rounded-full border ${
-                    person.interview_status === 'Completed' 
-                    ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
-                    : 'bg-amber-50 text-amber-600 border-amber-100'
-                  }`}>
-                    {person.interview_status?.toUpperCase() || 'PENDING'}
-                  </span>
-                </div>
-                <span className={`text-slate-400 transition-transform ${expandedId === person.id ? 'rotate-180' : ''}`}>
-                  ▼
+                <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${person.interview_status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {person.interview_status?.toUpperCase() || 'PENDING'}
                 </span>
               </div>
             </button>
 
-            {/* Expanded Detailed Report */}
             {expandedId === person.id && (
-              <div className="bg-slate-50 border-t border-slate-100 p-6 animate-in slide-in-from-top-4 duration-300">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  
-                  {/* Left Column: Skill Breakdown */}
-                  <div className="space-y-6">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Technical Proficiency</h3>
-                    <div className="space-y-4">
-                      <RatingBar label="Technical" value={person.technical_rating} color="bg-blue-500" />
-                      <RatingBar label="Communication" value={person.communication_rating} color="bg-purple-500" />
-                      <RatingBar label="Coding Logic" value={person.coding_logic_rating} color="bg-indigo-500" />
-                    </div>
-                  </div>
-
-                  {/* Middle Column: AI Summary */}
-                  <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-inner">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">AI Recruiter Summary</h3>
-                    <div className="prose prose-slate prose-sm max-w-none text-slate-700">
-                      <ReactMarkdown>{person.ai_result || "_No summary available yet. Assistant may still be processing._"}</ReactMarkdown>
-                    </div>
+              <div className="p-6 bg-slate-50 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
+                <div className="grid md:grid-cols-3 gap-8">
+                  <div className="space-y-4">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ratings</h3>
+                    <RatingItem label="Technical" score={person.technical_rating} />
+                    <RatingItem label="Communication" score={person.communication_rating} />
+                    <RatingItem label="Coding Logic" score={person.coding_logic_rating} />
                     
-                    {person.interview_transcript && (
-                      <div className="mt-6">
-                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Interview Transcript</h3>
-                         <div className="bg-slate-50 p-4 rounded-lg text-xs font-mono text-slate-500 max-h-40 overflow-y-auto whitespace-pre-wrap border border-slate-100">
-                           {person.interview_transcript}
-                         </div>
+                    {person.recording_url && (
+                      <div className="mt-6 pt-4 border-t">
+                        <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Interview Recording</p>
+                        <audio controls className="w-full h-8"><source src={person.recording_url} type="audio/wav" /></audio>
                       </div>
                     )}
+                  </div>
+                  <div className="md:col-span-2">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">AI Analysis</h3>
+                    <div className="prose prose-sm text-slate-600 font-medium bg-white p-4 rounded-xl border border-slate-200">
+                      <ReactMarkdown>{person.ai_result || "No analysis generated yet."}</ReactMarkdown>
+                    </div>
+                    <button 
+                      onClick={() => deleteCandidate(person.id)}
+                      className="mt-6 text-[10px] font-bold text-red-400 hover:text-red-600 uppercase tracking-widest"
+                    >
+                      Delete Candidate Record
+                    </button>
                   </div>
                 </div>
               </div>
@@ -137,20 +103,15 @@ export default function Dashboard() {
   );
 }
 
-// Helper Component for Rating Bars
-function RatingBar({ label, value, color }: { label: string, value: number, color: string }) {
-  const percentage = (value / 10) * 100 || 0;
+function RatingItem({ label, score }: { label: string; score: number }) {
   return (
     <div>
-      <div className="flex justify-between text-[10px] font-bold text-slate-600 mb-1 uppercase tracking-tight">
+      <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase mb-1">
         <span>{label}</span>
-        <span>{value || 0}/10</span>
+        <span>{score || 0}/10</span>
       </div>
-      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-        <div 
-          className={`${color} h-full transition-all duration-1000 ease-out`} 
-          style={{ width: `${percentage}%` }}
-        ></div>
+      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+        <div className="bg-blue-600 h-full" style={{ width: `${(score || 0) * 10}%` }}></div>
       </div>
     </div>
   );
