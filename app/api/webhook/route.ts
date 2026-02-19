@@ -12,30 +12,20 @@ export async function POST(req: Request) {
     const callData = payload.message;
 
     if (callData?.type === "end-of-call-report") {
-      // 1. Find the DB ID
-      const db_id =
-        callData.variableValues?.db_id ||
-        callData.artifact?.variables?.db_id ||
-        callData.artifact?.variableValues?.db_id ||
-        callData.assistantOverrides?.variableValues?.db_id;
+      const db_id = callData.variableValues?.db_id || callData.artifact?.variables?.db_id || callData.artifact?.variableValues?.db_id || callData.assistantOverrides?.variableValues?.db_id;
 
       if (!db_id) return NextResponse.json({ error: "No db_id" }, { status: 400 });
 
-      // 2. Extract Structured Data
       const structuredOutputs = callData.artifact?.structuredOutputs || {};
-      const reportKey = Object.keys(structuredOutputs).find(
-        (key) => structuredOutputs[key]?.name === "Interview_Audit_Report"
-      );
+      const reportKey = Object.keys(structuredOutputs).find(key => structuredOutputs[key]?.name === "Interview_Audit_Report");
       const results = reportKey ? structuredOutputs[reportKey].result : null;
 
-      // 3. Helper to clean scores (Handles 0-100 and rounds decimals)
       const cleanScore = (val: any) => {
         const num = Number(val) || 0;
         const normalized = num > 10 ? num / 10 : num;
-        return Math.round(normalized);
+        return Math.min(Math.round(normalized), 10);
       };
 
-      // 4. Update Supabase with Recording URL
       const { error } = await supabase
         .from("candidates")
         .update({
@@ -44,22 +34,17 @@ export async function POST(req: Request) {
           technical_rating: cleanScore(results?.technical_rating),
           communication_rating: cleanScore(results?.communication_rating),
           coding_logic_rating: cleanScore(results?.coding_logic_rating),
-          ai_result: callData.analysis?.summary || "Interview Audit Completed",
+          ai_result: callData.analysis?.summary || "Interview evaluation processed.",
           interview_transcript: callData.artifact?.transcript || "",
-          // ADDED THIS LINE:
           recording_url: callData.artifact?.recordingUrl || "" 
         })
         .eq("id", db_id);
 
       if (error) throw error;
-
-      console.log("✅ Record updated with Recording URL!");
       return NextResponse.json({ success: true });
     }
-
     return NextResponse.json({ message: "Ignored" });
   } catch (err: any) {
-    console.error("🔥 Webhook Error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
