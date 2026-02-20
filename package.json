@@ -11,8 +11,10 @@
   "dependencies": {
     "@clerk/nextjs": "^6.37.5",
     "@google/generative-ai": "^0.24.1",
+    "@monaco-editor/react": "^4.7.0",
     "@supabase/supabase-js": "^2.96.0",
     "@vapi-ai/web": "^2.5.2",
+    "face-api.js": "^0.22.2",
     "mammoth": "^1.11.0",
     "next": "16.1.6",
     "pdf-parse-fork": "^1.2.0",

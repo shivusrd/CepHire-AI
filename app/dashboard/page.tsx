@@ -7,6 +7,8 @@ export default function Dashboard() {
   const [candidates, setCandidates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showTranscript, setShowTranscript] = useState<string | null>(null);
+  const [violations, setViolations] = useState<any>({});
 
   async function getCandidates() {
     const { data, error } = await supabase
@@ -18,6 +20,55 @@ export default function Dashboard() {
     if (!error) setCandidates(data || []);
     setLoading(false);
   }
+
+  async function loadViolations(candidateId: string) {
+  const { data, error } = await supabase
+    .from("proctor_logs")
+    .select("*")
+    .eq("candidate_id", candidateId)
+    .order("created_at", { ascending: false });
+
+  if (!error) {
+    setViolations((prev: any) => ({
+      ...prev,
+      [candidateId]: data || [],
+    }));
+  }
+}
+
+// ✅ Integrity Score Calculator
+function calculateIntegrityScore(logs: any[]) {
+  let score = 100;
+
+  logs.forEach((v) => {
+    switch (v.violation_type) {
+      case "TAB_SWITCH":
+        score -= 10;
+        break;
+      case "WINDOW_BLUR":
+        score -= 10;
+        break;
+      case "NO_FACE_VISIBLE":
+        score -= 15;
+        break;
+      case "MULTIPLE_FACES_DETECTED":
+        score -= 25;
+        break;
+    }
+  });
+
+  return Math.max(score, 0);
+}
+
+function getIntegrityLabel(score: number) {
+  if (score >= 80)
+    return { label: "TRUSTED", color: "bg-emerald-500" };
+
+  if (score >= 50)
+    return { label: "SUSPICIOUS", color: "bg-yellow-500" };
+
+  return { label: "HIGH RISK", color: "bg-red-500" };
+}
 
   useEffect(() => { getCandidates(); }, []);
 
@@ -40,6 +91,10 @@ export default function Dashboard() {
     }
   };
 
+  useEffect(() => {
+  console.log("Updated violations state:", violations);
+}, [violations]);
+
   if (loading) return <div className="p-10 text-center font-black animate-pulse text-blue-600 tracking-widest">SYNCING CepHire AI PIPELINE...</div>;
 
   return (
@@ -57,7 +112,16 @@ export default function Dashboard() {
       <div className="grid gap-4">
         {candidates.map((person) => (
           <div key={person.id} className={`bg-white border rounded-[2.5rem] overflow-hidden transition-all shadow-sm ${person.selection_status === 'Selected' ? 'border-emerald-500 ring-4 ring-emerald-500/5' : 'border-slate-200'}`}>
-            <button onClick={() => setExpandedId(expandedId === person.id ? null : person.id)} className="w-full flex flex-col md:flex-row items-start md:items-center justify-between p-6 gap-4">
+            <button onClick={() => {
+  const id = String(person.id);
+
+  const newId = expandedId === id ? null : id;
+  setExpandedId(newId);
+
+  if (newId) {
+    loadViolations(id);
+  }
+}} className="w-full flex flex-col md:flex-row items-start md:items-center justify-between p-6 gap-4">
               <div className="flex items-center gap-5 text-left">
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-inner ${person.selection_status === 'Selected' ? 'bg-emerald-500' : 'bg-slate-900'}`}>
                   {person.name?.charAt(0)}
@@ -87,10 +151,40 @@ export default function Dashboard() {
               </div>
             </button>
 
-            {expandedId === person.id && (
+            {expandedId === String (person.id) && (
               <div className="p-8 bg-slate-50 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
                 <div className="grid md:grid-cols-3 gap-10">
                   <div className="space-y-6">
+                    {/* ✅ Integrity Score */}
+{violations[person.id] && (
+  (() => {
+    const score = calculateIntegrityScore(
+      violations[person.id]
+    );
+
+    const integrity = getIntegrityLabel(score);
+
+    return (
+      <div className="p-4 rounded-xl border bg-white shadow-sm">
+        <h4 className="text-[10px] font-black text-slate-400 uppercase mb-2">
+          Interview Integrity
+        </h4>
+
+        <div className="flex items-center justify-between">
+          <div
+            className={`px-4 py-1 text-white text-xs font-black rounded-full ${integrity.color}`}
+          >
+            {integrity.label}
+          </div>
+
+          <div className="text-lg font-black text-slate-900">
+            {score}/100
+          </div>
+        </div>
+      </div>
+    );
+  })()
+)}
                     <div>
                         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Competency Breakdown</h3>
                         <RatingItem label="Overall Performance" score={person.final_score} color="bg-blue-600" />
@@ -99,17 +193,61 @@ export default function Dashboard() {
                         <RatingItem label="Logic & Coding" score={person.coding_logic_rating} color="bg-sky-500" />
                     </div>
                     {person.recording_url && (
-                        <div className="pt-6 border-t border-slate-200">
-                             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Interview Recording</h3>
-                             <audio controls className="w-full h-10 rounded-xl shadow-inner bg-white"><source src={person.recording_url} type="audio/wav" /></audio>
-                        </div>
-                    )}
+    <div className="pt-6 border-t border-slate-200">
+         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Interview Recording</h3>
+         <audio controls className="w-full h-10 rounded-xl shadow-inner bg-white">
+           <source src={person.recording_url}/>
+         </audio>
+    </div>
+)}
+{violations[person.id] && (
+  <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+  <h4 className="font-black text-red-600 text-xs mb-3 uppercase">
+    ⚠️ Proctoring Alerts
+  </h4>
+
+  {violations[person.id].length === 0 ? (
+    <div className="text-xs text-slate-400">
+      No violations detected
+    </div>
+  ) : (
+    violations[person.id].map((v: any, i: number) => (
+      <div key={i} className="text-xs text-red-500 mb-1">
+        • {v.violation_type}
+      </div>
+    ))
+  )}
+</div>
+)}
                   </div>
                   <div className="md:col-span-2">
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">AI Recruiter Summary</h3>
                     <div className="prose prose-sm bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm mb-8 text-slate-600 leading-relaxed font-medium">
                       <ReactMarkdown>{person.ai_result || "Analysis pending..."}</ReactMarkdown>
                     </div>
+                    <button
+  onClick={() =>
+    setShowTranscript(
+      showTranscript === person.id ? null : person.id
+    )
+  }
+  className="mb-6 px-5 py-2 text-xs font-black uppercase tracking-widest border border-slate-200 rounded-xl hover:bg-slate-100 transition"
+>
+  {showTranscript === person.id
+    ? "Hide Transcript"
+    : "View Transcript"}
+</button>
+{showTranscript === person.id && (
+  <div className="bg-white border border-slate-200 rounded-[2rem] p-6 mb-8 max-h-[350px] overflow-y-auto shadow-inner">
+    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">
+      Interview Transcript
+    </h4>
+
+    <pre className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-medium">
+      {person.interview_transcript || "Transcript not available."}
+    </pre>
+  </div>
+)}
                     <div className="flex gap-4">
                       <button onClick={() => handleDecision(person, 'Selected')} className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all active:scale-95">APPROVE & HIRE</button>
                       <button onClick={() => handleDecision(person, 'Rejected')} className="flex-1 border-2 border-red-100 text-red-500 py-4 rounded-2xl font-black text-sm hover:bg-red-50 transition-all">REJECT CANDIDATE</button>

@@ -8,43 +8,84 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    const payload = await req.json();
-    const callData = payload.message;
+    const body = await req.json();
 
-    if (callData?.type === "end-of-call-report") {
-      const db_id = callData.variableValues?.db_id || callData.artifact?.variables?.db_id || callData.artifact?.variableValues?.db_id || callData.assistantOverrides?.variableValues?.db_id;
+    console.log("📩 VAPI WEBHOOK:", JSON.stringify(body, null, 2));
 
-      if (!db_id) return NextResponse.json({ error: "No db_id" }, { status: 400 });
+    const message = body?.message;
 
-      const structuredOutputs = callData.artifact?.structuredOutputs || {};
-      const reportKey = Object.keys(structuredOutputs).find(key => structuredOutputs[key]?.name === "Interview_Audit_Report");
-      const results = reportKey ? structuredOutputs[reportKey].result : null;
-
-      const cleanScore = (val: any) => {
-        const num = Number(val) || 0;
-        const normalized = num > 10 ? num / 10 : num;
-        return Math.min(Math.round(normalized), 10);
-      };
-
-      const { error } = await supabase
-        .from("candidates")
-        .update({
-          interview_status: "Completed",
-          final_score: cleanScore(results?.final_score),
-          technical_rating: cleanScore(results?.technical_rating),
-          communication_rating: cleanScore(results?.communication_rating),
-          coding_logic_rating: cleanScore(results?.coding_logic_rating),
-          ai_result: callData.analysis?.summary || "Interview evaluation processed.",
-          interview_transcript: callData.artifact?.transcript || "",
-          recording_url: callData.artifact?.recordingUrl || "" 
-        })
-        .eq("id", db_id);
-
-      if (error) throw error;
-      return NextResponse.json({ success: true });
+    if (message?.type !== "end-of-call-report") {
+      return NextResponse.json({ ignored: true });
     }
-    return NextResponse.json({ message: "Ignored" });
+
+    // ✅ db_id
+    const db_id =
+      message?.assistantOverrides?.variableValues?.db_id ||
+      message?.artifact?.variableValues?.db_id ||
+      message?.artifact?.variables?.db_id;
+
+    if (!db_id) {
+      console.log("❌ Missing db_id");
+      return NextResponse.json({ error: "Missing db_id" }, { status: 400 });
+    }
+
+    /* ---------------- TRANSCRIPT ---------------- */
+    const transcript =
+      message?.artifact?.transcript ||
+      message?.analysis?.transcript ||
+      "";
+
+    /* ---------------- SUMMARY ---------------- */
+    const summary =
+      message?.analysis?.summary ||
+      "Interview completed.";
+
+    /* ---------------- RECORDING ---------------- */
+    const recordingUrl =
+      message?.artifact?.recordingUrl || "";
+
+    /* ---------------- RATINGS ---------------- */
+    const structuredOutputs =
+      message?.artifact?.structuredOutputs || {};
+
+    const reportKey = Object.keys(structuredOutputs).find(
+      (key) =>
+        structuredOutputs[key]?.name === "Interview_Audit_Report"
+    );
+
+    const results = reportKey
+      ? structuredOutputs[reportKey].result
+      : {};
+
+    const cleanScore = (val: any) => {
+      const num = Number(val) || 0;
+      const normalized = num > 10 ? num / 10 : num;
+      return Math.min(Math.round(normalized), 10);
+    };
+
+    const updatePayload = {
+      interview_status: "Completed",
+      interview_transcript: transcript,
+      ai_result: summary,
+      recording_url: recordingUrl,
+      final_score: cleanScore(results?.final_score),
+      technical_rating: cleanScore(results?.technical_rating),
+      communication_rating: cleanScore(results?.communication_rating),
+      coding_logic_rating: cleanScore(results?.coding_logic_rating),
+    };
+
+    const { error } = await supabase
+      .from("candidates")
+      .update(updatePayload)
+      .eq("id", db_id);
+
+    if (error) throw error;
+
+    console.log("✅ Interview stored:", db_id);
+
+    return NextResponse.json({ success: true });
   } catch (err: any) {
+    console.error("Webhook error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
