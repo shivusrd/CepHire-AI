@@ -27,197 +27,272 @@ export default function Home() {
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const [showCompiler, setShowCompiler] = useState(false);
+  const [aiSkills, setAiSkills] = useState("");
+  const [aiExperience, setAiExperience] = useState("");
+  const [focusArea, setFocusArea] = useState("");
+  const [seniority, setSeniority] = useState("");
+  const interviewEndedRef = useRef(false);
+  const noFaceCountRef = useRef(0);
+  const lastNoFaceLogRef = useRef(0);
+  const lastMultiFaceLogRef = useRef(0);
 
   const logViolation = async (type: string) => {
-  if (!dbId) return;
+    if (!dbId) return;
 
-  await fetch("/api/proctor-log", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      db_id: dbId,
-      type,
-    }),
-  });
-};
+    await fetch("/api/proctor-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        db_id: dbId,
+        type,
+      }),
+    });
+  };
 
   const adminEmail = "dubeyshivam890@gmail.com";
   const isAdmin = user?.primaryEmailAddress?.emailAddress === adminEmail;
-   
+
+  const forceEndInterview = () => {
+    console.log("🛑 Force ending interview");
+
+    // stop vapi
+    vapi?.stop();
+
+    // stop camera + mic immediately
+    streamRef.current?.getTracks().forEach(track => track.stop());
+
+    // stop recording
+    if (recorderRef.current?.state !== "inactive") {
+      recorderRef.current?.stop();
+    }
+
+    setStep("processing");
+  };
+
   useEffect(() => {
-  const vapiInstance = new Vapi("c11d6c7c-3361-4d16-9c89-a0b96f953834");
+    const vapiInstance = new Vapi("c11d6c7c-3361-4d16-9c89-a0b96f953834");
 
-  vapiInstance.on("call-start", () => setStep("active"));
+    vapiInstance.on("call-start", () => setStep("active"));
 
-  vapiInstance.on("call-end", async () => {
-  setStep("processing");
+    vapiInstance.on("message", (msg: any) => {
+      if (interviewEndedRef.current) return;
 
-  if (recorderRef.current) {
-    recorderRef.current.stop();
+      const text =
+        msg?.transcript ||
+        msg?.message ||
+        msg?.content ||
+        "";
 
-    recorderRef.current.onstop = async () => {
-      const blob = new Blob(chunksRef.current, {
-        type: "video/webm",
-      });
+      if (
+        typeof text === "string" &&
+        text.toLowerCase().includes("this concludes your cephire ai interview")
+      ) {
+        interviewEndedRef.current = true;
 
-      const fileName = `${dbId}.webm`;
+        console.log("✅ Interview finished → switching UI instantly");
 
-      await supabase.storage
-        .from("recordings")
-        .upload(fileName, blob, { upsert: true });
+        // ⭐ IMMEDIATELY change screen
+        setStep("processing");
 
-      setStep("completed");
+        // stop camera instantly
+        streamRef.current?.getTracks().forEach(t => t.stop());
+
+        // stop Vapi safely
+        setTimeout(() => {
+          vapiInstance.stop();
+        }, 500);
+      }
+    });
+    vapiInstance.on("call-end", async () => {
+      if (!interviewEndedRef.current) {
+        setStep("processing");
+      }
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      if (recorderRef.current) {
+        recorderRef.current.stop();
+
+        recorderRef.current.onstop = async () => {
+          const blob = new Blob(chunksRef.current, {
+            type: "video/webm",
+          });
+
+          const fileName = `${dbId}.webm`;
+
+          await supabase.storage
+            .from("recordings")
+            .upload(fileName, blob, { upsert: true });
+
+          setStep("completed");
+        };
+      }
+    });
+
+    vapiInstance.on("error", (e: any) => {
+      if (e.error?.errorMsg !== "Meeting has ended") {
+        setStep("idle");
+      }
+    });
+
+    setVapi(vapiInstance);
+
+    return () => {
+      vapiInstance.stop();
     };
-  }
-});
-
-  vapiInstance.on("error", (e: any) => {
-    if (e.error?.errorMsg !== "Meeting has ended") {
-      setStep("idle");
-    }
-  });
-
-  setVapi(vapiInstance);
-
-  return () => {
-    vapiInstance.stop();
-  };
-}, []);
+  }, []);
 
   useEffect(() => {
-  if (step !== "active") return;
+    if (step !== "active") return;
 
-  const interval = setInterval(() => {
-    const container = document.getElementById("vapi-video-container");
+    const interval = setInterval(() => {
+      const container = document.getElementById("vapi-video-container");
 
-    if (container && streamRef.current) {
-      // prevent duplicate video
-      if (!container.querySelector("video")) {
-        const video = document.createElement("video");
+      if (container && streamRef.current) {
+        // prevent duplicate video
+        if (!container.querySelector("video")) {
+          const video = document.createElement("video");
 
-        video.srcObject = streamRef.current;
-        video.autoplay = true;
-        video.muted = true;
-        video.playsInline = true;
-        video.className = "w-full h-full object-cover";
+          video.srcObject = streamRef.current;
+          video.autoplay = true;
+          video.muted = true;
+          video.playsInline = true;
+          video.className = "w-full h-full object-cover";
 
-        container.innerHTML = "";
-        container.appendChild(video);
+          container.innerHTML = "";
+          container.appendChild(video);
+        }
+
+        clearInterval(interval);
       }
+    }, 300);
 
-      clearInterval(interval);
-    }
-  }, 300);
+    return () => clearInterval(interval);
+  }, [step]);
 
-  return () => clearInterval(interval);
-}, [step]);
+  // ✅ STEP 4 — LOAD FACE AI MODELS
+  useEffect(() => {
+    const loadModels = async () => {
+      await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
+      console.log("✅ Face detection ready");
+    };
 
-// ✅ STEP 4 — LOAD FACE AI MODELS
-useEffect(() => {
-  const loadModels = async () => {
-    await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
-    console.log("✅ Face detection ready");
-  };
+    loadModels();
+  }, []);
 
-  loadModels();
-}, []);
+  useEffect(() => {
+    if (step !== "active") return;
 
-// ✅ STEP 5 — PROCTORING FACE MONITOR
-useEffect(() => {
-  if (step !== "active") return;
+    const interval = setInterval(async () => {
+      try {
+        if (!streamRef.current) return;
 
-  const interval = setInterval(async () => {
-    if (!streamRef.current) return;
+        const video =
+          document.querySelector(
+            "#vapi-video-container video"
+          ) as HTMLVideoElement;
 
-    const video = document.querySelector("video");
-    if (!video) return;
+        if (!video || video.readyState < 2) return;
 
-    const detections = await faceapi.detectAllFaces(
-      video,
-      new faceapi.TinyFaceDetectorOptions()
-    );
+        const detections = await faceapi.detectAllFaces(
+          video,
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize: 416,
+            scoreThreshold: 0.5,
+          })
+        );
 
-    // 🚨 Multiple people
-    if (detections.length > 1) {
-      await supabase.from("proctor_logs").insert({
-        candidate_id: dbId,
-        violation_type: "MULTIPLE_FACES_DETECTED",
-      });
-    }
+        /* =====================================================
+           ✅ MULTIPLE FACE DETECTION (ANTI-SPAM)
+        ===================================================== */
 
-    // 🚨 No face
-    if (detections.length === 0) {
-      await supabase.from("proctor_logs").insert({
-        candidate_id: dbId,
-        violation_type: "NO_FACE_VISIBLE",
-      });
-    }
+        if (detections.length > 1) {
+          const now = Date.now();
 
-  }, 5000); // every 5 sec
+          console.warn("🚨 Multiple faces detected");
 
-  return () => clearInterval(interval);
-}, [step]);
+          // log max once every 20 sec
+          if (now - lastMultiFaceLogRef.current > 20000) {
+            lastMultiFaceLogRef.current = now;
 
-useEffect(() => {
-  const handleVisibility = () => {
-    if (document.hidden) {
-      console.warn("⚠️ Tab switched");
-      logViolation("TAB_SWITCH");
-    }
-  };
+            await supabase.from("proctor_logs").insert({
+              candidate_id: dbId,
+              violation_type: "MULTIPLE_FACES_DETECTED",
+            });
+          }
+        }
 
-  document.addEventListener("visibilitychange", handleVisibility);
+        /* =====================================================
+           ✅ NO FACE DETECTION (GRACE WINDOW SYSTEM)
+        ===================================================== */
 
-  return () =>
-    document.removeEventListener("visibilitychange", handleVisibility);
-}, [dbId]);
+        // Face detected → reset counter
+        if (detections.length > 0) {
+          noFaceCountRef.current = 0;
+          return;
+        }
 
-useEffect(() => {
-  const handleBlur = () => {
-    console.warn("⚠️ Window focus lost");
-    logViolation("WINDOW_BLUR");
-  };
+        // No face frame detected
+        noFaceCountRef.current += 1;
 
-  window.addEventListener("blur", handleBlur);
+        console.log(
+          "⚠️ No face frames:",
+          noFaceCountRef.current
+        );
 
-  return () => window.removeEventListener("blur", handleBlur);
-}, [dbId]);
+        // 5s interval × 3 = ~15 seconds absence required
+        if (noFaceCountRef.current >= 3) {
+          const now = Date.now();
 
-useEffect(() => {
-  if (step !== "active") return;
+          console.warn("🚨 FACE ABSENT CONFIRMED");
 
-  let interval: any;
+          // prevent spam logging
+          if (now - lastNoFaceLogRef.current > 20000) {
+            lastNoFaceLogRef.current = now;
 
-  const runFaceDetection = async () => {
-    const faceapi = await import("face-api.js");
+            await supabase.from("proctor_logs").insert({
+              candidate_id: dbId,
+              violation_type: "NO_FACE_VISIBLE",
+            });
+          }
 
-    await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
-
-    interval = setInterval(async () => {
-      const video =
-        document.querySelector("#vapi-video-container video") as HTMLVideoElement;
-
-      if (!video) return;
-
-      const detections = await faceapi.detectAllFaces(
-        video,
-        new faceapi.TinyFaceDetectorOptions()
-      );
-
-      if (detections.length === 0) {
-        logViolation("NO_FACE");
+          // reset counter
+          noFaceCountRef.current = 0;
+        }
+      } catch (err) {
+        console.error("Face detection error:", err);
       }
+    }, 5000); // every 5 seconds
 
-      if (detections.length > 1) {
-        logViolation("MULTIPLE_FACE");
+    return () => clearInterval(interval);
+  }, [step, dbId]);
+
+  useEffect(() => {
+    if (step !== "active") return; // ✅ only during interview
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        console.warn("⚠️ Tab switched during interview");
+        logViolation("TAB_SWITCH");
       }
-    }, 6000);
-  };
+    };
 
-  runFaceDetection();
+    document.addEventListener("visibilitychange", handleVisibility);
 
-  return () => clearInterval(interval);
-}, [step]);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
+  }, [step, dbId]);
+
+  useEffect(() => {
+    if (step !== "active") return; // ✅ interview only
+
+    const handleBlur = () => {
+      console.warn("⚠️ Window focus lost");
+      logViolation("WINDOW_BLUR");
+    };
+
+    window.addEventListener("blur", handleBlur);
+
+    return () => window.removeEventListener("blur", handleBlur);
+  }, [step, dbId]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -231,6 +306,10 @@ useEffect(() => {
       return;
     }
     setDbId(response.candidateId);
+    setAiSkills(response.skills);
+    setAiExperience(response.experience);
+    setFocusArea(response.focusArea);
+    setSeniority(response.seniority);
     const file = formData.get("resume") as File;
     setCandidateName(file.name.replace(/\.[^/.]+$/, ""));
     setIsProcessed(true);
@@ -238,46 +317,50 @@ useEffect(() => {
   }
 
   const startMandatoryVideoInterview = async () => {
-  if (!vapi) return alert("AI still initializing...");
+    if (!vapi) return alert("AI still initializing...");
 
-  try {
-    // 🎥 Request camera + microphone
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true,
-    });
+    try {
+      // 🎥 Request camera + microphone
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
 
-    // ✅ IMPORTANT:
-    // Store stream for later attachment (React renders UI after call-start)
-    streamRef.current = stream;
+      // ✅ IMPORTANT:
+      // Store stream for later attachment (React renders UI after call-start)
+      streamRef.current = stream;
 
-    // 🎥 START RECORDING (unchanged)
-    chunksRef.current = [];
+      // 🎥 START RECORDING (unchanged)
+      chunksRef.current = [];
 
-    const recorder = new MediaRecorder(stream);
-    recorderRef.current = recorder;
+      const recorder = new MediaRecorder(stream);
+      recorderRef.current = recorder;
 
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
-      }
-    };
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
 
-    recorder.start();
+      recorder.start();
 
-    // ✅ START VAPI INTERVIEW
-    vapi.start(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID!, {
-      variableValues: {
-        name: candidateName,
-        db_id: dbId,
-      },
-    });
+      // ✅ START VAPI INTERVIEW
+      vapi.start(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID!, {
+        variableValues: {
+          name: candidateName,
+          db_id: dbId,
+          skills: aiSkills,
+          experience: aiExperience,
+          focus_areas: focusArea,
+          seniority: seniority
+        },
+      });
 
-  } catch (err) {
-    console.error(err);
-    alert("Camera & microphone permission required.");
-  }
-};
+    } catch (err) {
+      console.error(err);
+      alert("Camera & microphone permission required.");
+    }
+  };
 
   if (!isUserLoaded) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 uppercase font-black text-blue-600 animate-pulse">
@@ -306,15 +389,15 @@ useEffect(() => {
           {/* UPLOAD STEP */}
           {!isProcessed && step === "idle" && (
             <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-slate-100 w-full">
-               <h1 className="text-4xl font-black text-center mb-8 tracking-tight">Technical <span className="text-blue-600">Video</span> Audit.</h1>
-               <form onSubmit={handleSubmit} className="space-y-6">
-                 <div className="border-2 border-dashed border-slate-200 p-8 rounded-3xl text-center hover:border-blue-400 bg-slate-50/50 cursor-pointer transition-all">
-                    <input type="file" name="resume" accept=".pdf,.docx" required className="text-sm cursor-pointer" />
-                 </div>
-                 <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-blue-100 active:scale-95 transition-all">
-                    {loading ? "PROCESSING..." : "ANALYZE RESUME"}
-                 </button>
-               </form>
+              <h1 className="text-4xl font-black text-center mb-8 tracking-tight">Technical <span className="text-blue-600">Video</span> Audit.</h1>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="border-2 border-dashed border-slate-200 p-8 rounded-3xl text-center hover:border-blue-400 bg-slate-50/50 cursor-pointer transition-all">
+                  <input type="file" name="resume" accept=".pdf,.docx" required className="text-sm cursor-pointer" />
+                </div>
+                <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-blue-100 active:scale-95 transition-all">
+                  {loading ? "PROCESSING..." : "ANALYZE RESUME"}
+                </button>
+              </form>
             </div>
           )}
 
@@ -333,78 +416,77 @@ useEffect(() => {
           )}
 
           {/* 🎥 SPLIT SCREEN INTERVIEW INTERFACE */}
-         {/* 🎥 RESPONSIVE INTERVIEW INTERFACE */}
-{step === "active" && (
-  <div className="fixed inset-0 bg-slate-950 flex flex-col z-40">
+          {/* 🎥 RESPONSIVE INTERVIEW INTERFACE */}
+          {step === "active" && (
+            <div className="fixed inset-0 bg-slate-950 flex flex-col z-40">
 
-    {/* ===== VIDEO + COMPILER AREA ===== */}
-    <div className="flex flex-1 overflow-hidden">
+              {/* ===== VIDEO + COMPILER AREA ===== */}
+              <div className="flex flex-1 overflow-hidden">
 
-      {/* ================= VIDEO PANEL ================= */}
-      <div
-        className={`relative bg-black transition-all duration-500 ${
-          showCompiler ? "w-[55%]" : "w-full"
-        }`}
-      >
-        <div
-          id="vapi-video-container"
-          className="w-full h-full flex items-center justify-center"
-        >
-          <div className="text-white text-xs animate-pulse">
-            Initializing Stream...
-          </div>
-        </div>
+                {/* ================= VIDEO PANEL ================= */}
+                <div
+                  className={`relative bg-black transition-all duration-500 ${showCompiler ? "w-[55%]" : "w-full"
+                    }`}
+                >
+                  <div
+                    id="vapi-video-container"
+                    className="w-full h-full flex items-center justify-center"
+                  >
+                    <div className="text-white text-xs animate-pulse">
+                      Initializing Stream...
+                    </div>
+                  </div>
 
-        {/* LIVE LABEL */}
-        <div className="absolute bottom-6 left-6 bg-black/60 backdrop-blur-md px-5 py-2 rounded-full flex items-center gap-3">
-          <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
-          <span className="text-white text-[11px] font-black uppercase tracking-widest">
-            Live: {candidateName}
-          </span>
-        </div>
+                  {/* LIVE LABEL */}
+                  <div className="absolute bottom-6 left-6 bg-black/60 backdrop-blur-md px-5 py-2 rounded-full flex items-center gap-3">
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
+                    <span className="text-white text-[11px] font-black uppercase tracking-widest">
+                      Live: {candidateName}
+                    </span>
+                  </div>
 
-        {/* COMPILER TOGGLE */}
-        <div className="absolute top-6 right-6">
-          {!showCompiler ? (
-            <button
-              onClick={() => setShowCompiler(true)}
-              className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-xs shadow-lg hover:bg-blue-700 transition-all"
-            >
-              Open Compiler 💻
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowCompiler(false)}
-              className="bg-red-500 text-white px-6 py-3 rounded-xl font-black text-xs shadow-lg hover:bg-red-600 transition-all"
-            >
-              Close Compiler ✖
-            </button>
+                  {/* COMPILER TOGGLE */}
+                  <div className="absolute top-6 right-6">
+                    {!showCompiler ? (
+                      <button
+                        onClick={() => setShowCompiler(true)}
+                        className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-xs shadow-lg hover:bg-blue-700 transition-all"
+                      >
+                        Open Compiler 💻
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowCompiler(false)}
+                        className="bg-red-500 text-white px-6 py-3 rounded-xl font-black text-xs shadow-lg hover:bg-red-600 transition-all"
+                      >
+                        Close Compiler ✖
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* ================= COMPILER PANEL ================= */}
+                {showCompiler && (
+                  <div className="w-[45%] min-w-[500px] bg-white border-l border-slate-200">
+                    <CodeEditor />
+                  </div>
+                )}
+              </div>
+            </div>
           )}
-        </div>
-      </div>
-
-      {/* ================= COMPILER PANEL ================= */}
-      {showCompiler && (
-        <div className="w-[45%] min-w-[500px] bg-white border-l border-slate-200">
-          <CodeEditor />
-        </div>
-      )}
-    </div>
-  </div>
-)}
 
           {step === "processing" && <ProcessingReport />}
           {step === "completed" && <InterviewSuccess />}
         </SignedIn>
 
         <SignedOut>
-            <div className="text-center bg-white p-12 rounded-[3rem] shadow-xl">
-                <h1 className="text-5xl font-black mb-4 tracking-tighter italic text-slate-900">CepHire AI</h1>
-                <p className="text-slate-400 mb-8 font-medium">Technical recruitment, automated with video & logic.</p>
-                <SignInButton mode="modal">
-                    <button className="bg-blue-600 text-white px-12 py-4 rounded-2xl font-black shadow-lg shadow-blue-200 hover:scale-105 transition-all uppercase tracking-tighter">Enter Pipeline</button>
-                </SignInButton>
-            </div>
+          <div className="text-center bg-white p-12 rounded-[3rem] shadow-xl">
+            <h1 className="text-5xl font-black mb-4 tracking-tighter italic text-slate-900">CepHire AI</h1>
+            <p className="text-slate-400 mb-8 font-medium">Technical recruitment, automated with video & logic.</p>
+            <SignInButton mode="modal">
+              <button className="bg-blue-600 text-white px-12 py-4 rounded-2xl font-black shadow-lg shadow-blue-200 hover:scale-105 transition-all uppercase tracking-tighter">Enter Pipeline</button>
+            </SignInButton>
+          </div>
         </SignedOut>
       </main>
     </div>

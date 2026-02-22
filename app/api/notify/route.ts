@@ -15,7 +15,7 @@ export async function POST(req: Request) {
 
     // 2. FUTURE CODE (Keep for when you have a domain)
     /*
-    if (process.env.RESEND_API_KEY && email !== "Not Found") {
+    if (resend)) {
         await resend.emails.send({
             from: "CepHire <onboarding@resend.dev>",
             to: email,
