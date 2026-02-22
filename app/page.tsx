@@ -333,65 +333,63 @@ useEffect(() => {
           )}
 
           {/* 🎥 SPLIT SCREEN INTERVIEW INTERFACE */}
-          {step === "active" && (
-  <div
-    className={`w-full h-[750px] transition-all duration-500 ${
-      showCompiler
-        ? "grid grid-cols-1 lg:grid-cols-5 gap-6 p-2 max-w-[1400px] mx-auto"
-        : "flex items-center justify-center"
-    }`}
-  >
-    {/* ================= VIDEO PANEL ================= */}
-    <div
-      className={`bg-slate-900 rounded-[2.5rem] overflow-hidden relative shadow-2xl border-4 border-blue-600/20 ${
-        showCompiler
-          ? "lg:col-span-2"
-          : "w-full h-full max-w-[1200px]"
-      }`}
-    >
+         {/* 🎥 RESPONSIVE INTERVIEW INTERFACE */}
+{step === "active" && (
+  <div className="fixed inset-0 bg-slate-950 flex flex-col z-40">
+
+    {/* ===== VIDEO + COMPILER AREA ===== */}
+    <div className="flex flex-1 overflow-hidden">
+
+      {/* ================= VIDEO PANEL ================= */}
       <div
-        id="vapi-video-container"
-        className="w-full h-full bg-slate-800 flex items-center justify-center"
+        className={`relative bg-black transition-all duration-500 ${
+          showCompiler ? "w-[55%]" : "w-full"
+        }`}
       >
-        <div className="text-slate-500 font-bold uppercase tracking-widest text-xs animate-pulse">
-          Initializing Stream...
+        <div
+          id="vapi-video-container"
+          className="w-full h-full flex items-center justify-center"
+        >
+          <div className="text-white text-xs animate-pulse">
+            Initializing Stream...
+          </div>
+        </div>
+
+        {/* LIVE LABEL */}
+        <div className="absolute bottom-6 left-6 bg-black/60 backdrop-blur-md px-5 py-2 rounded-full flex items-center gap-3">
+          <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
+          <span className="text-white text-[11px] font-black uppercase tracking-widest">
+            Live: {candidateName}
+          </span>
+        </div>
+
+        {/* COMPILER TOGGLE */}
+        <div className="absolute top-6 right-6">
+          {!showCompiler ? (
+            <button
+              onClick={() => setShowCompiler(true)}
+              className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-xs shadow-lg hover:bg-blue-700 transition-all"
+            >
+              Open Compiler 💻
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowCompiler(false)}
+              className="bg-red-500 text-white px-6 py-3 rounded-xl font-black text-xs shadow-lg hover:bg-red-600 transition-all"
+            >
+              Close Compiler ✖
+            </button>
+          )}
         </div>
       </div>
 
-      {/* LIVE LABEL */}
-      <div className="absolute bottom-6 left-6 bg-black/60 backdrop-blur-md px-5 py-2 rounded-full flex items-center gap-3">
-        <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
-        <span className="text-white text-[10px] font-black uppercase tracking-widest">
-          Live: {candidateName}
-        </span>
-      </div>
-
-      {/* COMPILER TOGGLE BUTTON */}
-      <div className="absolute top-6 right-6">
-        {!showCompiler ? (
-          <button
-            onClick={() => setShowCompiler(true)}
-            className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-xs shadow-lg hover:bg-blue-700 transition-all"
-          >
-            Open Compiler 💻
-          </button>
-        ) : (
-          <button
-            onClick={() => setShowCompiler(false)}
-            className="bg-red-500 text-white px-6 py-3 rounded-xl font-black text-xs shadow-lg hover:bg-red-600 transition-all"
-          >
-            Close Compiler ✖
-          </button>
-        )}
-      </div>
+      {/* ================= COMPILER PANEL ================= */}
+      {showCompiler && (
+        <div className="w-[45%] min-w-[500px] bg-white border-l border-slate-200">
+          <CodeEditor />
+        </div>
+      )}
     </div>
-
-    {/* ================= COMPILER PANEL ================= */}
-    {showCompiler && (
-      <div className="lg:col-span-3 rounded-[2.5rem] overflow-hidden shadow-2xl border border-slate-200">
-        <CodeEditor />
-      </div>
-    )}
   </div>
 )}
 
